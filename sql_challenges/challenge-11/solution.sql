@@ -85,12 +85,235 @@ SELECT 'Users:' AS section, username FROM users
 UNION ALL
 SELECT 'Tasks:' AS section, title FROM tasks;
 
- 
+ /* ==============================================================================
+   EXERCISE 1 — Model Design
+============================================================================== */
+-- SQLAlchemy ORM Model
 
+from sqlalchemy import (
+    Column, Integer, String, Text,
+    ForeignKey, DateTime,
+    CheckConstraint
+)
+
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+
+
+class Comment(Base):
+    __tablename__ = "comments"
+
+    id = Column(Integer, primary_key=True)
+
+    task_id = Column(
+        Integer,
+        ForeignKey("tasks.id", ondelete="CASCADE"),
+        nullable=False
+    )
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False
+    )
+
+    content = Column(
+        Text,
+        nullable=False
+    )
+
+    created_at = Column(
+        DateTime,
+        server_default=func.current_timestamp()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "content <> ''",
+            name="check_comment_content"
+        ),
+    )
+
+    -- Relationships
+    task = relationship(
+        "Task",
+        back_populates="comments"
+    )
+
+    user = relationship(
+        "User",
+        back_populates="comments"
+    )
+
+-- 1. What relationships should Comment have?
+-- Comment should have:
+-- *one relationship to Task
+-- *one relationship to User
+
+-- 2. Should Task have a comments relationship?
+-- Yes, one task can contain many comments.
+
+-- 3. What should happen to comments when a task is deleted?
+-- The comments should also be deleted automatically.
+-- This avoids orphaned comments that belong to non-existing tasks.
+-----
+ /* ==============================================================================
+   EXERCISE 2 — Migration creation
+============================================================================== */
+-- Generate migration
+
+command.revision(
+    alembic_cfg,
+    autogenerate=True,
+    message="add comments table"
+)
+
+--- Inspect Migration file
+
+import glob
+
+migration_files = sorted(
+    glob.glob('/content/project/alembic/versions/*.py')
+)
+
+for f in migration_files:
+    print(f)
+
+--- Open latest migration
+
+latest = migration_files[-1]
+
+with open(latest) as f:
+    print(f.read())
+
+
+-- 1. What does 'upgrade()' do?
+-- 'upgrade()' applies the migration changes to the database.
+--
+-- 2. What does 'downgrade()' do?
+-- 'downgrade()' reverses the migration changes.
+--
+-- 3. What happens if you downgrade this migration?
+-- The comments table will be removed from the database.
+-- Any data stored in comments will also be permanently deleted.
+-----
+ /* ==============================================================================
+   EXERCISE 3 — CRUD Challenge
+============================================================================== */
+from sqlalchemy.orm import Session
+
+
+with Session(engine) as session:
+
+    print("===================================")
+    print("CREATING TEAM")
+    print("===================================")
+
+    devops = Team(
+        name="DevOps",
+        description="Infrastructure team"
+    )
+
+    session.add(devops)
+    session.commit()
+
+    print(f"Created Team: {devops.name}")
+
+
+    print("\n===================================")
+    print("CREATING USER")
+    print("===================================")
+
+    sebas = User(
+        username="sebis",
+        email="sebis@tec.com",
+        full_name="sebas oliva",
+        team=devops
+    )
+
+    session.add(sebas)
+    session.commit()
+
+    print(f"Created User: {sebas.username}")
+
+
+    print("\n===================================")
+    print("CREATING TASKS")
+    print("===================================")
+
+    task1 = Task(
+        title="Setup CI/CD",
+        description="Configure GitHub Actions",
+        status="high_priority",
+        assignee=sebas
+    )
+
+    task2 = Task(
+        title="Dockerize app",
+        description="Create Docker containers",
+        status="medium_priority",
+        assignee=sebas
+    )
+
+    task3 = Task(
+        title="Clean logs",
+        description="Delete old server logs",
+        status="low_priority",
+        assignee=sebas
+    )
+
+    session.add_all([task1, task2, task3])
+    session.commit()
+
+    print("3 tasks created.")
+
+
+    print("\n===================================")
+    print("TASK COUNT")
+    print("===================================")
+
+    task_count = session.query(Task).count()
+
+    print(f"Total Tasks: {task_count}")
+
+
+    print("\n===================================")
+    print("CLOSING ONE TASK")
+    print("===================================")
+
+    task1.status = "closed"
+
+    session.commit()
+
+    print(f"Task Closed: {task1.title}")
+
+
+    print("\n===================================")
+    print("DELETING LOWEST PRIORITY TASK")
+    print("===================================")
+
+    session.delete(task3)
+
+    session.commit()
+
+    print(f"Deleted Task: {task3.title}")
+
+
+    print("\n===================================")
+    print("FINAL TASKS")
+    print("===================================")
+
+    remaining_tasks = session.query(Task).all()
+
+    for task in remaining_tasks:
+        print(f"- {task.title} ({task.status})")
 -----
 /* ==============================================================================
    ALEMBIC DOWNGRADE QUESTIONS
 ============================================================================== */
+
+-- Rollback migration 
+command.downgrade(alembic_cfg, "-1")
 
 -- 1. What happens to the column?
 -- When you downgrade to remove a column, it is dropped (deleted) entirely 
